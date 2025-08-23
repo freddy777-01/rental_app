@@ -1,9 +1,9 @@
 import 'package:avatar_plus/avatar_plus.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_gap/flutter_gap.dart';
 import 'tenants.dart';
 import 'properties.dart';
+import 'profile.dart';
 
 class Welcome extends StatefulWidget {
   const Welcome({super.key});
@@ -62,6 +62,11 @@ class _Welcome extends State<Welcome> {
             Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const PropertiesScreen()),
+            );
+          } else if (index == 3) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const ProfileScreen()),
             );
           }
         },

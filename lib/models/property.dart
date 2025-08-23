@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 
 enum RoomType {
   singleRoom, // Single room without toilet

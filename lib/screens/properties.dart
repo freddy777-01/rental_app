@@ -186,7 +186,7 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
       context: context,
       builder:
           (context) => Dialog(
-            child: Container(
+            child: SizedBox(
               width: MediaQuery.of(context).size.width * 0.9,
               height: MediaQuery.of(context).size.height * 0.8,
               child: Column(
@@ -1558,7 +1558,7 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                             ],
                           ),
                         );
-                      }).toList(),
+                      }),
                       Gap(16),
                     ],
 

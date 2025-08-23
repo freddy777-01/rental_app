@@ -1,7 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'package:rental_app/screens/Welcome.dart';
+// CLOUDINARY PACKAGES
+import 'package:cloudinary_url_gen/cloudinary.dart';
+import 'package:cloudinary_url_gen/transformation/transformation.dart';
+import 'package:cloudinary_api/uploader/cloudinary_uploader.dart';
+import 'package:cloudinary_api/src/request/model/uploader_params.dart';
+import 'package:cloudinary_url_gen/transformation/effect/effect.dart';
+import 'package:cloudinary_url_gen/transformation/resize/resize.dart';
 
-void main() {
+// Create a Cloudinary instance and set your cloud name.
+var cloudinary = Cloudinary.fromStringUrl(
+  'cloudinary://816173986778337:FCbIk5L1oy_tGMfrfvRpo-ijuDs@dujga4sq6',
+);
+
+void main() async {
+  cloudinary.config.urlConfig.secure = true;
+
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MyApp());
 }
 

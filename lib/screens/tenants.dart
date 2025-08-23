@@ -3,7 +3,6 @@ import 'package:flutter_gap/flutter_gap.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../models/property.dart';
 
 class Tenant {
   final String id;
@@ -178,7 +177,7 @@ class _TenantsScreenState extends State<TenantsScreen> {
       context: context,
       builder:
           (context) => Dialog(
-            child: Container(
+            child: SizedBox(
               width: MediaQuery.of(context).size.width * 0.9,
               height: MediaQuery.of(context).size.height * 0.8,
               child: Column(
@@ -633,7 +632,7 @@ class _AddTenantFormState extends State<AddTenantForm> {
   final _propertyController = TextEditingController();
   final _rentController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
-  List<String> _contractPages = []; // Multiple contract pages
+  final List<String> _contractPages = []; // Multiple contract pages
   final ImagePicker _picker = ImagePicker();
 
   Future<void> _takeContractPage() async {
@@ -792,7 +791,7 @@ class _AddTenantFormState extends State<AddTenantForm> {
 
                           // Contract Pages Display
                           if (_contractPages.isNotEmpty) ...[
-                            Container(
+                            SizedBox(
                               height: 120,
                               child: ListView.builder(
                                 scrollDirection: Axis.horizontal,
