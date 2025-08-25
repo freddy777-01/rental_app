@@ -2,6 +2,11 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:cloudinary_url_gen/cloudinary.dart';
+import 'package:cloudinary_url_gen/transformation/transformation.dart';
+import 'package:cloudinary_api/uploader/cloudinary_uploader.dart';
+import 'package:cloudinary_api/src/request/model/uploader_params.dart';
+import 'package:cloudinary_url_gen/transformation/effect/effect.dart';
+import 'package:cloudinary_url_gen/transformation/resize/resize.dart';
 
 /// Upload result containing both public ID and URL
 class CloudinaryUploadResult {
@@ -17,22 +22,25 @@ class CloudinaryUploadResult {
 }
 
 class CloudinaryService {
-  static final Cloudinary _cloudinary = Cloudinary.fromStringUrl(
-    'cloudinary://816173986778337:FCbIk5L1oy_tGMfrfvRpo-ijuDs@dujga4sq6',
-  );
-
   // Your Cloudinary credentials
   static const String _cloudName = 'dujga4sq6';
-  static const String _apiKey = '816173986778337';
-  static const String _apiSecret = 'FCbIk5L1oy_tGMfrfvRpo-ijuDs';
   static const String _uploadPreset = 'ml_default'; // Use your upload preset
+  static const String _API_KEY = "816173986778337";
+  static const String _API_SECRET = "FCbIk5L1oy_tGMfrfvRpo-ijuDs";
+  static const String _CLOUD_NAME = "dujga4sq6";
 
-  /// Upload image to Cloudinary and return the upload result
+  static final Cloudinary cloudinary = Cloudinary.fromStringUrl(
+    'cloudinary://$_API_KEY:$_API_SECRET@$_CLOUD_NAME',
+  );
+
+  /// Upload image to Cloudinary using HTTP (reliable method)
   static Future<CloudinaryUploadResult?> uploadProfileImage(
     File imageFile,
   ) async {
+    cloudinary.config.urlConfig.secure = true;
+
     try {
-      // Convert image to base64
+      // Convert image to bytes
       final bytes = await imageFile.readAsBytes();
 
       // Create upload URL
@@ -65,8 +73,8 @@ class CloudinaryService {
       if (response.statusCode == 200) {
         return CloudinaryUploadResult(
           publicId: jsonData['public_id'],
-          url: jsonData['url'],
-          secureUrl: jsonData['secure_url'],
+          url: jsonData['url'] ?? '',
+          secureUrl: jsonData['secure_url'] ?? '',
         );
       } else {
         print('Upload failed: ${jsonData['error']}');
@@ -78,7 +86,7 @@ class CloudinaryService {
     }
   }
 
-  /// Generate a URL for a profile image using the public ID
+  /// Generate a URL for a profile image using the public ID with transformations
   static String getProfileImageUrl(
     String publicId, {
     int width = 300,
@@ -86,7 +94,7 @@ class CloudinaryService {
     String quality = 'auto',
   }) {
     try {
-      // Simple URL generation with transformations
+      // Manual URL generation with transformations (reliable method)
       final baseUrl = 'https://res.cloudinary.com/$_cloudName/image/upload';
       final transformations = 'c_fill,w_$width,h_$height,q_$quality';
       return '$baseUrl/$transformations/$publicId';
@@ -108,11 +116,11 @@ class CloudinaryService {
     int height = 300,
   }) {
     try {
-      // Insert transformations into the URL
+      // Extract public ID from the base URL
       final parts = baseUrl.split('/upload/');
       if (parts.length == 2) {
-        final transformations = 'c_fill,w_$width,h_$height,q_auto';
-        return '${parts[0]}/upload/$transformations/${parts[1]}';
+        final publicId = parts[1];
+        return getProfileImageUrl(publicId, width: width, height: height);
       }
       return baseUrl;
     } catch (e) {
