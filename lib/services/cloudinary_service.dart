@@ -7,6 +7,7 @@ import 'package:cloudinary_api/uploader/cloudinary_uploader.dart';
 import 'package:cloudinary_api/src/request/model/uploader_params.dart';
 import 'package:cloudinary_url_gen/transformation/effect/effect.dart';
 import 'package:cloudinary_url_gen/transformation/resize/resize.dart';
+import 'package:rental_app/models/user.dart';
 
 /// Upload result containing both public ID and URL
 class CloudinaryUploadResult {
@@ -34,57 +35,51 @@ class CloudinaryService {
   );
 
   /// Upload image to Cloudinary using HTTP (reliable method)
-  static Future<CloudinaryUploadResult?> uploadProfileImage(
+  static Future<Map<String, dynamic>?> uploadProfileImage(
     File imageFile,
+    User user,
   ) async {
     cloudinary.config.urlConfig.secure = true;
+    bool saved = false;
 
     try {
       // Convert image to bytes
-      final bytes = await imageFile.readAsBytes();
+      // final imageBytes = await imageFile.readAsBytes();
 
       // Create upload URL
-      final uploadUrl =
-          'https://api.cloudinary.com/v1_1/$_cloudName/image/upload';
 
-      // Create form data
-      final request =
-          http.MultipartRequest('POST', Uri.parse(uploadUrl))
-            ..fields['upload_preset'] = _uploadPreset
-            ..fields['folder'] = 'rental_app/profile_images'
-            ..fields['public_id'] =
-                'profile_${DateTime.now().millisecondsSinceEpoch}'
-            ..fields['overwrite'] = 'true';
-
-      // Add the image file
-      request.files.add(
-        http.MultipartFile.fromBytes(
-          'file',
-          bytes,
-          filename: 'profile_image.jpg',
+      final response = await cloudinary.uploader().upload(
+        imageFile,
+        params: UploadParams(
+          publicId: "${user.name}_${user.phone}",
+          uniqueFilename: true,
+          overwrite: true,
+          resourceType: "image",
+          folder: "profile_images/${user.name}_${user.phone}",
         ),
+        completion:
+            (response) => {
+              if (response.responseCode == 200)
+                {print('Upload successful: ${response.data}')}
+              else
+                {print('*****Upload failed: ${response.error}')},
+            },
       );
 
-      // Send the request
-      final response = await request.send();
-      final responseData = await response.stream.bytesToString();
-      final jsonData = jsonDecode(responseData);
+      // print('*****response: ${response?.responseCode}');
 
-      if (response.statusCode == 200) {
-        return CloudinaryUploadResult(
-          publicId: jsonData['public_id'],
-          url: jsonData['url'] ?? '',
-          secureUrl: jsonData['secure_url'] ?? '',
-        );
-      } else {
-        print('Upload failed: ${jsonData['error']}');
-        return null;
-      }
+      return <String, dynamic>{
+        "response": response?.responseCode == 200 ? true : false,
+        "publicId": response?.data?.publicId,
+        "url": response?.data?.secureUrl,
+        "secureUrl": response?.data?.secureUrl,
+      };
     } catch (e) {
       print('Error uploading image to Cloudinary: $e');
       return null;
     }
   }
+  // End of image upload
 
   /// Generate a URL for a profile image using the public ID with transformations
   static String getProfileImageUrl(

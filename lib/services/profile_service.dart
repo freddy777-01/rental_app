@@ -98,9 +98,12 @@ class ProfileService {
       // Upload image to Cloudinary
       final uploadResult = await CloudinaryService.uploadProfileImage(
         imageFile,
+        user,
       );
 
-      if (uploadResult == null) {
+      print('*****uploadResult: $uploadResult');
+
+      if (uploadResult?["response"] == false) {
         print('Failed to upload image to Cloudinary');
         return false;
       }
@@ -113,8 +116,8 @@ class ProfileService {
 
       // Update user with new Cloudinary data (public ID and URL)
       final updatedUser = user.copyWith(
-        profileImagePublicId: uploadResult.publicId,
-        profileImageUrl: uploadResult.secureUrl, // Use secure URL
+        profileImagePublicId: uploadResult?["publicId"],
+        profileImageUrl: uploadResult?["secureUrl"], // Use secure URL
         updatedAt: DateTime.now(),
       );
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_gap/flutter_gap.dart';
 import '../models/property.dart';
+import '../services/property_service.dart';
 
 class PropertiesScreen extends StatefulWidget {
   const PropertiesScreen({super.key});
@@ -15,90 +16,40 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
   List<Property> _filteredProperties = [];
   bool _isSearching = false;
 
+  bool _isLoading = false;
+
   @override
   void initState() {
     super.initState();
-    _loadSampleProperties();
-    _filteredProperties = _allProperties;
+    _loadPropertiesFromFirebase();
   }
 
-  void _loadSampleProperties() {
-    _allProperties.addAll([
-      Property(
-        id: '1',
-        name: 'Sunset Apartments',
-        location: 'Mikocheni',
-        address: 'Plot 123, Mikocheni B, Dar es Salaam',
-        description: 'Modern apartment complex with various room types',
-        rooms: [
-          Room(
-            id: '1',
-            name: 'Room 1A',
-            type: RoomType.selfContained,
-            monthlyRent: 180000,
-            isOccupied: true,
-            currentTenantName: 'Reginald Raymond',
-            occupiedSince: DateTime(2024, 1, 15),
-            amenities: ['Furnished', 'Balcony', 'Kitchen'],
+  Future<void> _loadPropertiesFromFirebase() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final properties = await PropertyService.fetchProperties();
+      setState(() {
+        _allProperties.clear();
+        _allProperties.addAll(properties);
+        _filteredProperties = _allProperties;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading properties: $e'),
+            backgroundColor: Colors.red,
           ),
-          Room(
-            id: '2',
-            name: 'Room 1B',
-            type: RoomType.singleRoom,
-            monthlyRent: 120000,
-            isOccupied: false,
-            amenities: ['Furnished'],
-          ),
-          Room(
-            id: '3',
-            name: 'Room 2A',
-            type: RoomType.twoRooms,
-            monthlyRent: 250000,
-            isOccupied: true,
-            currentTenantName: 'Heyday Dismiss',
-            occupiedSince: DateTime(2024, 2, 1),
-            amenities: ['Furnished', 'Kitchen'],
-          ),
-        ],
-        purchaseDate: DateTime(2020, 6, 15),
-        purchasePrice: 45000000,
-        ownerName: 'John Doe',
-        ownerPhone: '+255 700 123 456',
-        ownerEmail: 'john.doe@email.com',
-      ),
-      Property(
-        id: '2',
-        name: 'Green Valley House',
-        location: 'Masaki',
-        address: 'House 45, Green Valley Street, Masaki',
-        description: 'Spacious family house converted to rental units',
-        rooms: [
-          Room(
-            id: '4',
-            name: 'Main Unit',
-            type: RoomType.selfContained,
-            monthlyRent: 300000,
-            isOccupied: true,
-            currentTenantName: 'Henna Sinbad',
-            occupiedSince: DateTime(2024, 3, 10),
-            amenities: ['Furnished', 'Garden', 'Parking'],
-          ),
-          Room(
-            id: '5',
-            name: 'Studio Unit',
-            type: RoomType.singleRoom,
-            monthlyRent: 150000,
-            isOccupied: false,
-            amenities: ['Furnished'],
-          ),
-        ],
-        purchaseDate: DateTime(2018, 12, 10),
-        purchasePrice: 35000000,
-        ownerName: 'John Doe',
-        ownerPhone: '+255 700 123 456',
-        ownerEmail: 'john.doe@email.com',
-      ),
-    ]);
+        );
+      }
+    }
   }
 
   void _filterProperties(String query) {
@@ -114,12 +65,14 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
                       property.name.toLowerCase().contains(
                         query.toLowerCase(),
                       ) ||
-                      property.location.toLowerCase().contains(
-                        query.toLowerCase(),
-                      ) ||
-                      property.address.toLowerCase().contains(
-                        query.toLowerCase(),
-                      ),
+                      (property.address?.toLowerCase().contains(
+                            query.toLowerCase(),
+                          ) ??
+                          false) ||
+                      (property.address?.toLowerCase().contains(
+                            query.toLowerCase(),
+                          ) ??
+                          false),
                 )
                 .toList();
         _isSearching = true;
@@ -133,15 +86,33 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => const AddPropertyForm(),
-    ).then((newProperty) {
+    ).then((newProperty) async {
       if (newProperty != null) {
-        setState(() {
-          _allProperties.add(newProperty);
-          _filteredProperties = _allProperties;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${newProperty.name} added successfully!')),
-        );
+        // Save to Firebase
+        final success = await PropertyService.saveProperty(newProperty);
+
+        if (success) {
+          // Reload properties from Firebase
+          await _loadPropertiesFromFirebase();
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('${newProperty.name} saved successfully!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Failed to save property. Please try again.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
       }
     });
   }
@@ -159,17 +130,40 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
                 child: const Text('Cancel'),
               ),
               TextButton(
-                onPressed: () {
-                  setState(() {
-                    _allProperties.remove(property);
-                    _filteredProperties = _allProperties;
-                  });
+                onPressed: () async {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('${property.name} deleted successfully!'),
-                    ),
+
+                  // Delete from Firebase
+                  final success = await PropertyService.deleteProperty(
+                    property.id!,
                   );
+
+                  if (success) {
+                    // Reload properties from Firebase
+                    await _loadPropertiesFromFirebase();
+
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            '${property.name} deleted successfully!',
+                          ),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  } else {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Failed to delete property. Please try again.',
+                          ),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
                 },
                 child: const Text(
                   'Delete',
@@ -179,6 +173,43 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
             ],
           ),
     );
+  }
+
+  void _editProperty(Property property) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => AddPropertyForm(propertyToEdit: property),
+    ).then((updatedProperty) async {
+      if (updatedProperty != null) {
+        // Update in Firebase
+        final success = await PropertyService.updateProperty(updatedProperty);
+
+        if (success) {
+          // Reload properties from Firebase
+          await _loadPropertiesFromFirebase();
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('${updatedProperty.name} updated successfully!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Failed to update property. Please try again.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      }
+    });
   }
 
   void _viewPropertyDetails(Property property) {
@@ -230,19 +261,15 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
                         children: [
                           // Basic Info
                           _buildInfoSection('Basic Information', [
-                            _buildInfoRow('Location', property.location),
-                            _buildInfoRow('Address', property.address),
-                            _buildInfoRow('Description', property.description),
+                            _buildInfoRow(
+                              'Address',
+                              property.address ?? 'Not provided',
+                            ),
                             _buildInfoRow('Owner', property.ownerName),
                             _buildInfoRow('Owner Phone', property.ownerPhone),
-                            _buildInfoRow('Owner Email', property.ownerEmail),
                             _buildInfoRow(
-                              'Purchase Date',
-                              '${property.purchaseDate.day}/${property.purchaseDate.month}/${property.purchaseDate.year}',
-                            ),
-                            _buildInfoRow(
-                              'Purchase Price',
-                              'TZS ${property.purchasePrice.toStringAsFixed(0)}',
+                              'Owner Email',
+                              property.ownerEmail ?? 'Not provided',
                             ),
                           ]),
 
@@ -251,16 +278,16 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
                           // Statistics
                           _buildInfoSection('Property Statistics', [
                             _buildInfoRow(
-                              'Total Rooms',
-                              '${property.totalRooms}',
+                              'Total Partitions',
+                              '${property.totalPartitions}',
                             ),
                             _buildInfoRow(
-                              'Occupied Rooms',
-                              '${property.occupiedRooms}',
+                              'Occupied Partitions',
+                              '${property.occupiedPartitions}',
                             ),
                             _buildInfoRow(
-                              'Available Rooms',
-                              '${property.availableRooms}',
+                              'Available Partitions',
+                              '${property.availablePartitions}',
                             ),
                             _buildInfoRow(
                               'Occupancy Rate',
@@ -278,28 +305,24 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
 
                           Gap(16),
 
-                          // Room Types
-                          _buildInfoSection('Room Types', [
-                            _buildInfoRow(
-                              'Single Rooms',
-                              '${property.singleRooms} (${property.availableSingleRooms} available)',
-                            ),
+                          // Partition Types
+                          _buildInfoSection('Partition Types', [
                             _buildInfoRow(
                               'Self Contained',
-                              '${property.selfContainedRooms} (${property.availableSelfContained} available)',
+                              '${property.selfContainedPartitions} (${property.availableSelfContained} available)',
                             ),
                             _buildInfoRow(
-                              'Two Rooms Units',
-                              '${property.twoRoomsUnits} (${property.availableTwoRooms} available)',
+                              'Not Self Contained',
+                              '${property.notSelfContainedPartitions} (${property.availableNotSelfContained} available)',
                             ),
                           ]),
 
                           Gap(16),
 
-                          // Rooms List
-                          _buildInfoSection('All Rooms', [
-                            ...property.rooms.map(
-                              (room) => _buildRoomInfo(room),
+                          // Partitions List
+                          _buildInfoSection('All Partitions', [
+                            ...property.partitions.map(
+                              (partition) => _buildPartitionInfo(partition),
                             ),
                           ]),
                         ],
@@ -320,10 +343,13 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Color(0xFF3F51B5).withOpacity(0.3), width: 1),
+        border: Border.all(
+          color: Color(0xFF3F51B5).withValues(alpha: 0.3),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withValues(alpha: 0.1),
             spreadRadius: 1,
             blurRadius: 3,
             offset: const Offset(0, 2),
@@ -372,7 +398,7 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
     );
   }
 
-  Widget _buildRoomInfo(Room room) {
+  Widget _buildPartitionInfo(Partition partition) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
@@ -380,7 +406,7 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
         color: Color(0xFFF5F6FA),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: room.isOccupied ? Color(0xFF2ECC71) : Color(0xFFE74C3C),
+          color: partition.isOccupied ? Color(0xFF2ECC71) : Color(0xFFE74C3C),
           width: 1,
         ),
       ),
@@ -391,7 +417,7 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                room.name,
+                partition.name,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: Color(0xFF2C3E50),
@@ -401,11 +427,13 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color:
-                      room.isOccupied ? Color(0xFF2ECC71) : Color(0xFFE74C3C),
+                      partition.isOccupied
+                          ? Color(0xFF2ECC71)
+                          : Color(0xFFE74C3C),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  room.isOccupied ? 'Occupied' : 'Available',
+                  partition.isOccupied ? 'Occupied' : 'Available',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 12,
@@ -417,30 +445,35 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
           ),
           Gap(4),
           Text(
-            '${room.typeDescription} - ${room.toiletStatus}',
+            '${partition.typeDescription} - ${partition.toiletStatus}',
             style: TextStyle(color: Color(0xFF7F8C8D), fontSize: 12),
           ),
           Gap(4),
           Text(
-            'TZS ${room.monthlyRent.toStringAsFixed(0)}',
+            'TZS ${partition.monthlyRent.toStringAsFixed(0)}',
             style: TextStyle(
               color: Color(0xFF2ECC71),
               fontWeight: FontWeight.bold,
             ),
           ),
-          if (room.isOccupied) ...[
+          Gap(4),
+          Text(
+            '${partition.numberOfRooms} room(s)${partition.hasLivingRoom ? ' + Living Room' : ''}',
+            style: TextStyle(color: Color(0xFF7F8C8D), fontSize: 12),
+          ),
+          if (partition.isOccupied) ...[
             Gap(4),
             Text(
-              'Tenant: ${room.currentTenantName}',
+              'Tenant: ${partition.currentTenantName}',
               style: TextStyle(color: Color(0xFF7F8C8D), fontSize: 12),
             ),
           ],
-          if (room.amenities.isNotEmpty) ...[
+          if (partition.amenities.isNotEmpty) ...[
             Gap(4),
             Wrap(
               spacing: 4,
               children:
-                  room.amenities
+                  partition.amenities
                       .map(
                         (amenity) => Container(
                           padding: const EdgeInsets.symmetric(
@@ -448,7 +481,7 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: Color(0xFF3F51B5).withOpacity(0.1),
+                            color: Color(0xFF3F51B5).withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
@@ -476,6 +509,13 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
         backgroundColor: Color(0xFF3F51B5), // Primary: Indigo Blue
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadPropertiesFromFirebase,
+            tooltip: 'Refresh Properties',
+          ),
+        ],
       ),
       body: Container(
         decoration: BoxDecoration(
@@ -518,7 +558,9 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
             // Properties List
             Expanded(
               child:
-                  _filteredProperties.isEmpty
+                  _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _filteredProperties.isEmpty
                       ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -576,7 +618,7 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.grey.withOpacity(0.3),
+                                  color: Colors.grey.withValues(alpha: 0.3),
                                   spreadRadius: 1,
                                   blurRadius: 3,
                                   offset: const Offset(0, 2),
@@ -618,11 +660,15 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
                                         ), // Text: Secondary
                                       ),
                                       Gap(4),
-                                      Text(
-                                        property.location,
-                                        style: TextStyle(
-                                          color: Color(0xFF7F8C8D),
-                                        ), // Text: Secondary
+                                      Expanded(
+                                        child: Text(
+                                          property.address ??
+                                              'No address provided',
+                                          style: TextStyle(
+                                            color: Color(0xFF7F8C8D),
+                                          ), // Text: Secondary
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -637,11 +683,14 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
                                         ), // Text: Secondary
                                       ),
                                       Gap(4),
-                                      Text(
-                                        '${property.occupiedRooms}/${property.totalRooms} rooms occupied',
-                                        style: TextStyle(
-                                          color: Color(0xFF7F8C8D),
-                                        ), // Text: Secondary
+                                      Expanded(
+                                        child: Text(
+                                          '${property.occupiedPartitions}/${property.totalPartitions} occupied',
+                                          style: TextStyle(
+                                            color: Color(0xFF7F8C8D),
+                                          ), // Text: Secondary
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -656,11 +705,14 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
                                         ), // Text: Secondary
                                       ),
                                       Gap(4),
-                                      Text(
-                                        'TZS ${property.totalMonthlyRent.toStringAsFixed(0)}/month',
-                                        style: TextStyle(
-                                          color: Color(0xFF7F8C8D),
-                                        ), // Text: Secondary
+                                      Expanded(
+                                        child: Text(
+                                          'TZS ${property.totalMonthlyRent.toStringAsFixed(0)}/month',
+                                          style: TextStyle(
+                                            color: Color(0xFF7F8C8D),
+                                          ), // Text: Secondary
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -711,16 +763,7 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
                                         ],
                                     onSelected: (value) {
                                       if (value == 'edit') {
-                                        // TODO: Implement edit functionality
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'Edit functionality coming soon!',
-                                            ),
-                                          ),
-                                        );
+                                        _editProperty(property);
                                       } else if (value == 'delete') {
                                         _deleteProperty(property);
                                       }
@@ -748,7 +791,9 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
 }
 
 class AddPropertyForm extends StatefulWidget {
-  const AddPropertyForm({super.key});
+  final Property? propertyToEdit;
+
+  const AddPropertyForm({super.key, this.propertyToEdit});
 
   @override
   State<AddPropertyForm> createState() => _AddPropertyFormState();
@@ -766,12 +811,12 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
   final _purchasePriceController = TextEditingController();
 
   DateTime _purchaseDate = DateTime.now();
-  final List<Room> _rooms = [];
+  final List<Partition> _partitions = [];
 
-  // Room form controllers
-  final _roomNameController = TextEditingController();
-  final _roomRentController = TextEditingController();
-  RoomType _selectedRoomType = RoomType.singleRoom;
+  // Partition form controllers
+  final _partitionNameController = TextEditingController();
+  final _partitionRentController = TextEditingController();
+  PartitionType _selectedPartitionType = PartitionType.notSelfContained;
   final List<String> _selectedAmenities = [];
 
   final List<String> _availableAmenities = [
@@ -787,38 +832,38 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
     'Air Conditioning',
   ];
 
-  void _addRoom() {
-    if (_roomNameController.text.trim().isEmpty ||
-        _roomRentController.text.trim().isEmpty) {
+  void _addPartition() {
+    if (_partitionNameController.text.trim().isEmpty ||
+        _partitionRentController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in room name and rent')),
+        const SnackBar(content: Text('Please fill in partition name and rent')),
       );
       return;
     }
 
-    final room = Room(
+    final partition = Partition(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: _roomNameController.text.trim(),
-      type: _selectedRoomType,
-      monthlyRent: double.parse(_roomRentController.text),
+      name: _partitionNameController.text.trim(),
+      type: _selectedPartitionType,
+      monthlyRent: double.parse(_partitionRentController.text),
       amenities: List.from(_selectedAmenities),
     );
 
     setState(() {
-      _rooms.add(room);
-      _roomNameController.clear();
-      _roomRentController.clear();
+      _partitions.add(partition);
+      _partitionNameController.clear();
+      _partitionRentController.clear();
       _selectedAmenities.clear();
     });
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('${room.name} added successfully!')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${partition.name} added successfully!')),
+    );
   }
 
-  void _removeRoom(int index) {
+  void _removePartition(int index) {
     setState(() {
-      _rooms.removeAt(index);
+      _partitions.removeAt(index);
     });
   }
 
@@ -830,6 +875,25 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
         _selectedAmenities.add(amenity);
       }
     });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.propertyToEdit != null) {
+      // Populate form with existing property data for editing
+      final property = widget.propertyToEdit!;
+      _nameController.text = property.name;
+      _addressController.text = property.address ?? '';
+      _ownerNameController.text = property.ownerName;
+      _ownerPhoneController.text = property.ownerPhone;
+      _ownerEmailController.text = property.ownerEmail ?? '';
+      _purchasePriceController.text = property.purchasePrice?.toString() ?? '';
+      if (property.purchaseDate != null) {
+        _purchaseDate = property.purchaseDate!;
+      }
+      _partitions.addAll(property.partitions);
+    }
   }
 
   @override
@@ -854,8 +918,10 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Add New Property',
+                Text(
+                  widget.propertyToEdit != null
+                      ? 'Edit Property'
+                      : 'Add New Property',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -925,24 +991,18 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                     TextFormField(
                       controller: _addressController,
                       decoration: const InputDecoration(
-                        labelText: 'Full Address *',
+                        labelText: 'Full Address (Optional)',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.map),
                       ),
                       maxLines: 2,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter address';
-                        }
-                        return null;
-                      },
                     ),
                     Gap(16),
 
                     TextFormField(
                       controller: _descriptionController,
                       decoration: const InputDecoration(
-                        labelText: 'Description',
+                        labelText: 'Description (Optional)',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.description),
                       ),
@@ -950,9 +1010,9 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                     ),
                     Gap(16),
 
-                    // Purchase Information
+                    // Purchase Information (Optional)
                     Text(
-                      'Purchase Information',
+                      'Purchase Information (Optional)',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -977,7 +1037,7 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                       },
                       child: InputDecorator(
                         decoration: const InputDecoration(
-                          labelText: 'Purchase Date *',
+                          labelText: 'Purchase Date (Optional)',
                           border: OutlineInputBorder(),
                           prefixIcon: Icon(Icons.calendar_today),
                         ),
@@ -991,16 +1051,15 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                     TextFormField(
                       controller: _purchasePriceController,
                       decoration: const InputDecoration(
-                        labelText: 'Purchase Price (TZS) *',
+                        labelText: 'Purchase Price (TZS) (Optional)',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.attach_money),
                       ),
                       keyboardType: TextInputType.number,
                       validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter purchase price';
-                        }
-                        if (double.tryParse(value) == null) {
+                        if (value != null &&
+                            value.isNotEmpty &&
+                            double.tryParse(value) == null) {
                           return 'Please enter a valid number';
                         }
                         return null;
@@ -1055,16 +1114,15 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                     TextFormField(
                       controller: _ownerEmailController,
                       decoration: const InputDecoration(
-                        labelText: 'Owner Email *',
+                        labelText: 'Owner Email (Optional)',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.email),
                       ),
                       keyboardType: TextInputType.emailAddress,
                       validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter owner email';
-                        }
-                        if (!value.contains('@')) {
+                        if (value != null &&
+                            value.isNotEmpty &&
+                            !value.contains('@')) {
                           return 'Please enter a valid email';
                         }
                         return null;
@@ -1072,9 +1130,9 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                     ),
                     Gap(24),
 
-                    // Rooms Section
+                    // Partitions Section
                     Text(
-                      'Rooms (${_rooms.length})',
+                      'Partitions (${_partitions.length})',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -1083,14 +1141,14 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                     ),
                     Gap(16),
 
-                    // Add Room Form
+                    // Add Partition Form
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: Color(0xFFF5F6FA),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: Color(0xFF3F51B5).withOpacity(0.3),
+                          color: Color(0xFF3F51B5).withValues(alpha: 0.3),
                           width: 1,
                         ),
                       ),
@@ -1098,7 +1156,7 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Add New Room',
+                            'Add New Partition',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
@@ -1111,18 +1169,18 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                             children: [
                               Expanded(
                                 child: TextFormField(
-                                  controller: _roomNameController,
+                                  controller: _partitionNameController,
                                   decoration: const InputDecoration(
-                                    labelText: 'Room Name',
+                                    labelText: 'Partition Name',
                                     border: OutlineInputBorder(),
-                                    hintText: 'e.g., Room 1A',
+                                    hintText: 'e.g., Partition A',
                                   ),
                                 ),
                               ),
                               Gap(12),
                               Expanded(
                                 child: TextFormField(
-                                  controller: _roomRentController,
+                                  controller: _partitionRentController,
                                   decoration: const InputDecoration(
                                     labelText: 'Monthly Rent (TZS)',
                                     border: OutlineInputBorder(),
@@ -1149,34 +1207,36 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: Color(0xFF3F51B5).withOpacity(0.3),
+                                color: Color(0xFF3F51B5).withValues(alpha: 0.3),
                                 width: 1,
                               ),
                             ),
                             child: Column(
                               children: [
-                                // Single Room Option
+                                // Not Self Contained Option
                                 InkWell(
                                   onTap: () {
                                     setState(() {
-                                      _selectedRoomType = RoomType.singleRoom;
+                                      _selectedPartitionType =
+                                          PartitionType.notSelfContained;
                                     });
                                   },
                                   child: Container(
                                     padding: const EdgeInsets.all(16),
                                     decoration: BoxDecoration(
                                       color:
-                                          _selectedRoomType ==
-                                                  RoomType.singleRoom
+                                          _selectedPartitionType ==
+                                                  PartitionType.notSelfContained
                                               ? Color(
                                                 0xFF3F51B5,
-                                              ).withOpacity(0.1)
+                                              ).withValues(alpha: 0.1)
                                               : Colors.transparent,
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
                                         color:
-                                            _selectedRoomType ==
-                                                    RoomType.singleRoom
+                                            _selectedPartitionType ==
+                                                    PartitionType
+                                                        .notSelfContained
                                                 ? Color(0xFF3F51B5)
                                                 : Colors.transparent,
                                         width: 2,
@@ -1194,14 +1254,16 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                                               width: 2,
                                             ),
                                             color:
-                                                _selectedRoomType ==
-                                                        RoomType.singleRoom
+                                                _selectedPartitionType ==
+                                                        PartitionType
+                                                            .notSelfContained
                                                     ? Color(0xFF3F51B5)
                                                     : Colors.transparent,
                                           ),
                                           child:
-                                              _selectedRoomType ==
-                                                      RoomType.singleRoom
+                                              _selectedPartitionType ==
+                                                      PartitionType
+                                                          .notSelfContained
                                                   ? Icon(
                                                     Icons.check,
                                                     size: 14,
@@ -1216,7 +1278,7 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                                                 CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                'Single Room',
+                                                'Not Self Contained',
                                                 style: TextStyle(
                                                   fontSize: 16,
                                                   fontWeight: FontWeight.w600,
@@ -1241,32 +1303,34 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                                 // Divider
                                 Divider(
                                   height: 1,
-                                  color: Color(0xFF3F51B5).withOpacity(0.2),
+                                  color: Color(
+                                    0xFF3F51B5,
+                                  ).withValues(alpha: 0.2),
                                 ),
 
                                 // Self Contained Option
                                 InkWell(
                                   onTap: () {
                                     setState(() {
-                                      _selectedRoomType =
-                                          RoomType.selfContained;
+                                      _selectedPartitionType =
+                                          PartitionType.selfContained;
                                     });
                                   },
                                   child: Container(
                                     padding: const EdgeInsets.all(16),
                                     decoration: BoxDecoration(
                                       color:
-                                          _selectedRoomType ==
-                                                  RoomType.selfContained
+                                          _selectedPartitionType ==
+                                                  PartitionType.selfContained
                                               ? Color(
                                                 0xFF3F51B5,
-                                              ).withOpacity(0.1)
+                                              ).withValues(alpha: 0.1)
                                               : Colors.transparent,
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
                                         color:
-                                            _selectedRoomType ==
-                                                    RoomType.selfContained
+                                            _selectedPartitionType ==
+                                                    PartitionType.selfContained
                                                 ? Color(0xFF3F51B5)
                                                 : Colors.transparent,
                                         width: 2,
@@ -1284,14 +1348,16 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                                               width: 2,
                                             ),
                                             color:
-                                                _selectedRoomType ==
-                                                        RoomType.selfContained
+                                                _selectedPartitionType ==
+                                                        PartitionType
+                                                            .selfContained
                                                     ? Color(0xFF3F51B5)
                                                     : Colors.transparent,
                                           ),
                                           child:
-                                              _selectedRoomType ==
-                                                      RoomType.selfContained
+                                              _selectedPartitionType ==
+                                                      PartitionType
+                                                          .selfContained
                                                   ? Icon(
                                                     Icons.check,
                                                     size: 14,
@@ -1315,94 +1381,6 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                                               ),
                                               Text(
                                                 'Private toilet inside',
-                                                style: TextStyle(
-                                                  fontSize: 14,
-                                                  color: Color(0xFF7F8C8D),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-
-                                // Divider
-                                Divider(
-                                  height: 1,
-                                  color: Color(0xFF3F51B5).withOpacity(0.2),
-                                ),
-
-                                // Two Rooms Option
-                                InkWell(
-                                  onTap: () {
-                                    setState(() {
-                                      _selectedRoomType = RoomType.twoRooms;
-                                    });
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color:
-                                          _selectedRoomType == RoomType.twoRooms
-                                              ? Color(
-                                                0xFF3F51B5,
-                                              ).withOpacity(0.1)
-                                              : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color:
-                                            _selectedRoomType ==
-                                                    RoomType.twoRooms
-                                                ? Color(0xFF3F51B5)
-                                                : Colors.transparent,
-                                        width: 2,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: 20,
-                                          height: 20,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: Color(0xFF3F51B5),
-                                              width: 2,
-                                            ),
-                                            color:
-                                                _selectedRoomType ==
-                                                        RoomType.twoRooms
-                                                    ? Color(0xFF3F51B5)
-                                                    : Colors.transparent,
-                                          ),
-                                          child:
-                                              _selectedRoomType ==
-                                                      RoomType.twoRooms
-                                                  ? Icon(
-                                                    Icons.check,
-                                                    size: 14,
-                                                    color: Colors.white,
-                                                  )
-                                                  : null,
-                                        ),
-                                        Gap(16),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                'Two Rooms',
-                                                style: TextStyle(
-                                                  fontSize: 16,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: Color(0xFF2C3E50),
-                                                ),
-                                              ),
-                                              Text(
-                                                'Shared toilet outside',
                                                 style: TextStyle(
                                                   fontSize: 14,
                                                   color: Color(0xFF7F8C8D),
@@ -1442,7 +1420,7 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                                         (selected) => _toggleAmenity(amenity),
                                     selectedColor: Color(
                                       0xFF3F51B5,
-                                    ).withOpacity(0.2),
+                                    ).withValues(alpha: 0.2),
                                     checkmarkColor: Color(0xFF3F51B5),
                                   );
                                 }).toList(),
@@ -1452,9 +1430,9 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton.icon(
-                              onPressed: _addRoom,
+                              onPressed: _addPartition,
                               icon: const Icon(Icons.add),
-                              label: const Text('Add Room'),
+                              label: const Text('Add Partition'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Color(0xFF3F51B5),
                                 foregroundColor: Colors.white,
@@ -1466,10 +1444,10 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                     ),
                     Gap(16),
 
-                    // Rooms List
-                    if (_rooms.isNotEmpty) ...[
+                    // Partitions List
+                    if (_partitions.isNotEmpty) ...[
                       Text(
-                        'Added Rooms:',
+                        'Added Partitions:',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -1477,9 +1455,9 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                         ),
                       ),
                       Gap(12),
-                      ..._rooms.asMap().entries.map((entry) {
+                      ..._partitions.asMap().entries.map((entry) {
                         final index = entry.key;
-                        final room = entry.value;
+                        final partition = entry.value;
                         return Container(
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.all(12),
@@ -1498,24 +1476,24 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      room.name,
+                                      partition.name,
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         color: Color(0xFF2C3E50),
                                       ),
                                     ),
                                     Text(
-                                      '${room.typeDescription} - TZS ${room.monthlyRent.toStringAsFixed(0)}',
+                                      '${partition.typeDescription} - TZS ${partition.monthlyRent.toStringAsFixed(0)}',
                                       style: TextStyle(
                                         color: Color(0xFF7F8C8D),
                                         fontSize: 12,
                                       ),
                                     ),
-                                    if (room.amenities.isNotEmpty)
+                                    if (partition.amenities.isNotEmpty)
                                       Wrap(
                                         spacing: 4,
                                         children:
-                                            room.amenities
+                                            partition.amenities
                                                 .map(
                                                   (amenity) => Container(
                                                     padding:
@@ -1526,7 +1504,7 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                                                     decoration: BoxDecoration(
                                                       color: Color(
                                                         0xFF3F51B5,
-                                                      ).withOpacity(0.1),
+                                                      ).withValues(alpha: 0.1),
                                                       borderRadius:
                                                           BorderRadius.circular(
                                                             8,
@@ -1549,7 +1527,7 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                                 ),
                               ),
                               IconButton(
-                                onPressed: () => _removeRoom(index),
+                                onPressed: () => _removePartition(index),
                                 icon: Icon(
                                   Icons.delete,
                                   color: Color(0xFFE74C3C),
@@ -1567,15 +1545,17 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton(
-                        onPressed: _rooms.isEmpty ? null : _submitForm,
+                        onPressed: _partitions.isEmpty ? null : _submitForm,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Color(
                             0xFF2ECC71,
                           ), // Accent: Emerald Green
                           foregroundColor: Colors.white,
                         ),
-                        child: const Text(
-                          'Add Property',
+                        child: Text(
+                          widget.propertyToEdit != null
+                              ? 'Update Property'
+                              : 'Add Property',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -1595,21 +1575,32 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
 
   void _submitForm() {
     if (_formKey.currentState!.validate()) {
-      final newProperty = Property(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+      final property = Property(
+        id:
+            widget.propertyToEdit?.id ??
+            DateTime.now().millisecondsSinceEpoch.toString(),
         name: _nameController.text.trim(),
-        location: _locationController.text.trim(),
-        address: _addressController.text.trim(),
-        description: _descriptionController.text.trim(),
-        rooms: _rooms,
-        purchaseDate: _purchaseDate,
-        purchasePrice: double.parse(_purchasePriceController.text),
+        address:
+            _addressController.text.trim().isEmpty
+                ? null
+                : _addressController.text.trim(),
         ownerName: _ownerNameController.text.trim(),
         ownerPhone: _ownerPhoneController.text.trim(),
-        ownerEmail: _ownerEmailController.text.trim(),
+        ownerEmail:
+            _ownerEmailController.text.trim().isEmpty
+                ? null
+                : _ownerEmailController.text.trim(),
+        partitions: _partitions,
+        createdAt: widget.propertyToEdit?.createdAt ?? DateTime.now(),
+        updatedAt: DateTime.now(),
+        purchaseDate: _purchaseDate,
+        purchasePrice:
+            _purchasePriceController.text.trim().isEmpty
+                ? null
+                : double.tryParse(_purchasePriceController.text.trim()),
       );
 
-      Navigator.pop(context, newProperty);
+      Navigator.pop(context, property);
     }
   }
 
@@ -1623,8 +1614,8 @@ class _AddPropertyFormState extends State<AddPropertyForm> {
     _ownerPhoneController.dispose();
     _ownerEmailController.dispose();
     _purchasePriceController.dispose();
-    _roomNameController.dispose();
-    _roomRentController.dispose();
+    _partitionNameController.dispose();
+    _partitionRentController.dispose();
     super.dispose();
   }
 }

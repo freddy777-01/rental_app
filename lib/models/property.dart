@@ -1,22 +1,24 @@
-
-enum RoomType {
-  singleRoom, // Single room without toilet
-  selfContained, // Room with toilet inside
-  twoRooms, // Two rooms without toilet (shared toilet outside)
+enum PartitionType {
+  selfContained, // With private toilet
+  notSelfContained, // Shared toilet outside
 }
 
-class Room {
+class Partition {
   final String id;
-  final String name;
-  final RoomType type;
+  final String name; // Partition/segment name
+  final PartitionType type;
   final double monthlyRent;
   final bool isOccupied;
   final String? currentTenantId;
   final String? currentTenantName;
   final DateTime? occupiedSince;
-  final List<String> amenities; // e.g., ["Furnished", "Balcony", "Kitchen"]
 
-  Room({
+  // Partition properties
+  final bool hasLivingRoom;
+  final int numberOfRooms;
+  final List<String> amenities; // Room amenities
+
+  Partition({
     required this.id,
     required this.name,
     required this.type,
@@ -25,43 +27,43 @@ class Room {
     this.currentTenantId,
     this.currentTenantName,
     this.occupiedSince,
+    this.hasLivingRoom = false,
+    this.numberOfRooms = 1,
     this.amenities = const [],
   });
 
   String get typeDescription {
     switch (type) {
-      case RoomType.singleRoom:
-        return 'Single Room';
-      case RoomType.selfContained:
+      case PartitionType.selfContained:
         return 'Self Contained';
-      case RoomType.twoRooms:
-        return 'Two Rooms';
+      case PartitionType.notSelfContained:
+        return 'Not Self Contained';
     }
   }
 
   String get toiletStatus {
     switch (type) {
-      case RoomType.singleRoom:
-        return 'Shared Toilet';
-      case RoomType.selfContained:
+      case PartitionType.selfContained:
         return 'Private Toilet';
-      case RoomType.twoRooms:
+      case PartitionType.notSelfContained:
         return 'Shared Toilet';
     }
   }
 
-  Room copyWith({
+  Partition copyWith({
     String? id,
     String? name,
-    RoomType? type,
+    PartitionType? type,
     double? monthlyRent,
     bool? isOccupied,
     String? currentTenantId,
     String? currentTenantName,
     DateTime? occupiedSince,
+    bool? hasLivingRoom,
+    int? numberOfRooms,
     List<String>? amenities,
   }) {
-    return Room(
+    return Partition(
       id: id ?? this.id,
       name: name ?? this.name,
       type: type ?? this.type,
@@ -70,111 +72,254 @@ class Room {
       currentTenantId: currentTenantId ?? this.currentTenantId,
       currentTenantName: currentTenantName ?? this.currentTenantName,
       occupiedSince: occupiedSince ?? this.occupiedSince,
+      hasLivingRoom: hasLivingRoom ?? this.hasLivingRoom,
+      numberOfRooms: numberOfRooms ?? this.numberOfRooms,
       amenities: amenities ?? this.amenities,
+    );
+  }
+
+  // Convert to JSON
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'type': type.toString(),
+      'monthlyRent': monthlyRent,
+      'isOccupied': isOccupied,
+      'currentTenantId': currentTenantId,
+      'currentTenantName': currentTenantName,
+      'occupiedSince': occupiedSince?.toIso8601String(),
+      'hasLivingRoom': hasLivingRoom,
+      'numberOfRooms': numberOfRooms,
+      'amenities': amenities,
+    };
+  }
+
+  // Create from JSON
+  factory Partition.fromJson(Map<String, dynamic> json) {
+    return Partition(
+      id: json['id'] ?? '',
+      name: json['name'] ?? '',
+      type: PartitionType.values.firstWhere(
+        (e) => e.toString() == json['type'],
+        orElse: () => PartitionType.notSelfContained,
+      ),
+      monthlyRent: (json['monthlyRent'] ?? 0).toDouble(),
+      isOccupied: json['isOccupied'] ?? false,
+      currentTenantId: json['currentTenantId'],
+      currentTenantName: json['currentTenantName'],
+      occupiedSince:
+          json['occupiedSince'] != null
+              ? DateTime.parse(json['occupiedSince'])
+              : null,
+      hasLivingRoom: json['hasLivingRoom'] ?? false,
+      numberOfRooms: json['numberOfRooms'] ?? 1,
+      amenities: List<String>.from(json['amenities'] ?? []),
     );
   }
 }
 
 class Property {
-  final String id;
-  final String name;
-  final String location;
-  final String address;
-  final String description;
-  final List<Room> rooms;
-  final DateTime purchaseDate;
-  final double purchasePrice;
+  final String? id;
+  final String name; // Block name
+  final String? address; // Optional
   final String ownerName;
   final String ownerPhone;
-  final String ownerEmail;
+  final String? ownerEmail; // Optional
+  final List<Partition> partitions; // Segments/partitions
   final bool isActive;
-  final List<String> images; // Property images
-  final Map<String, dynamic> additionalInfo; // For any extra details
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+  final DateTime? purchaseDate; // Optional
+  final double? purchasePrice; // Optional
 
   Property({
-    required this.id,
+    this.id,
     required this.name,
-    required this.location,
-    required this.address,
-    required this.description,
-    required this.rooms,
-    required this.purchaseDate,
-    required this.purchasePrice,
+    this.address,
     required this.ownerName,
     required this.ownerPhone,
-    required this.ownerEmail,
+    this.ownerEmail,
+    this.partitions = const [],
     this.isActive = true,
-    this.images = const [],
-    this.additionalInfo = const {},
+    this.createdAt,
+    this.updatedAt,
+    this.purchaseDate,
+    this.purchasePrice,
   });
 
   // Computed properties
-  int get totalRooms => rooms.length;
-  int get occupiedRooms => rooms.where((room) => room.isOccupied).length;
-  int get availableRooms => totalRooms - occupiedRooms;
+  int get totalPartitions => partitions.length;
+  int get occupiedPartitions =>
+      partitions.where((partition) => partition.isOccupied).length;
+  int get availablePartitions => totalPartitions - occupiedPartitions;
   double get totalMonthlyRent =>
-      rooms.fold(0, (sum, room) => sum + room.monthlyRent);
-  double get occupiedMonthlyRent => rooms
-      .where((room) => room.isOccupied)
-      .fold(0, (sum, room) => sum + room.monthlyRent);
+      partitions.fold(0, (sum, partition) => sum + partition.monthlyRent);
+  double get occupiedMonthlyRent => partitions
+      .where((partition) => partition.isOccupied)
+      .fold(0, (sum, partition) => sum + partition.monthlyRent);
   double get occupancyRate =>
-      totalRooms > 0 ? (occupiedRooms / totalRooms) * 100 : 0;
+      totalPartitions > 0 ? (occupiedPartitions / totalPartitions) * 100 : 0;
 
-  // Room statistics by type
-  int get singleRooms =>
-      rooms.where((room) => room.type == RoomType.singleRoom).length;
-  int get selfContainedRooms =>
-      rooms.where((room) => room.type == RoomType.selfContained).length;
-  int get twoRoomsUnits =>
-      rooms.where((room) => room.type == RoomType.twoRooms).length;
-
-  // Available rooms by type
-  int get availableSingleRooms =>
-      rooms
-          .where((room) => room.type == RoomType.singleRoom && !room.isOccupied)
+  // Partition statistics by type
+  int get selfContainedPartitions =>
+      partitions
+          .where((partition) => partition.type == PartitionType.selfContained)
           .length;
-  int get availableSelfContained =>
-      rooms
+  int get notSelfContainedPartitions =>
+      partitions
           .where(
-            (room) => room.type == RoomType.selfContained && !room.isOccupied,
+            (partition) => partition.type == PartitionType.notSelfContained,
           )
           .length;
-  int get availableTwoRooms =>
-      rooms
-          .where((room) => room.type == RoomType.twoRooms && !room.isOccupied)
+
+  // Available partitions by type
+  int get availableSelfContained =>
+      partitions
+          .where(
+            (partition) =>
+                partition.type == PartitionType.selfContained &&
+                !partition.isOccupied,
+          )
           .length;
+  int get availableNotSelfContained =>
+      partitions
+          .where(
+            (partition) =>
+                partition.type == PartitionType.notSelfContained &&
+                !partition.isOccupied,
+          )
+          .length;
+
+  // Get available partitions
+  List<Partition> get availablePartitionsList =>
+      partitions.where((partition) => !partition.isOccupied).toList();
+
+  // Get occupied partitions
+  List<Partition> get occupiedPartitionsList =>
+      partitions.where((partition) => partition.isOccupied).toList();
+
+  // Assign tenant to partition
+  Property assignTenantToPartition(
+    String partitionId,
+    String tenantId,
+    String tenantName,
+  ) {
+    final updatedPartitions =
+        partitions.map((partition) {
+          if (partition.id == partitionId) {
+            return partition.copyWith(
+              isOccupied: true,
+              currentTenantId: tenantId,
+              currentTenantName: tenantName,
+              occupiedSince: DateTime.now(),
+            );
+          }
+          return partition;
+        }).toList();
+
+    return copyWith(partitions: updatedPartitions, updatedAt: DateTime.now());
+  }
+
+  // Unassign tenant from partition
+  Property unassignTenantFromPartition(String partitionId) {
+    final updatedPartitions =
+        partitions.map((partition) {
+          if (partition.id == partitionId) {
+            return partition.copyWith(
+              isOccupied: false,
+              currentTenantId: null,
+              currentTenantName: null,
+              occupiedSince: null,
+            );
+          }
+          return partition;
+        }).toList();
+
+    return copyWith(partitions: updatedPartitions, updatedAt: DateTime.now());
+  }
+
+  // Get partition by ID
+  Partition? getPartitionById(String partitionId) {
+    try {
+      return partitions.firstWhere((partition) => partition.id == partitionId);
+    } catch (e) {
+      return null;
+    }
+  }
 
   Property copyWith({
     String? id,
     String? name,
-    String? location,
     String? address,
-    String? description,
-    List<Room>? rooms,
-    DateTime? purchaseDate,
-    double? purchasePrice,
     String? ownerName,
     String? ownerPhone,
     String? ownerEmail,
+    List<Partition>? partitions,
     bool? isActive,
-    List<String>? images,
-    Map<String, dynamic>? additionalInfo,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    DateTime? purchaseDate,
+    double? purchasePrice,
   }) {
     return Property(
       id: id ?? this.id,
       name: name ?? this.name,
-      location: location ?? this.location,
       address: address ?? this.address,
-      description: description ?? this.description,
-      rooms: rooms ?? this.rooms,
-      purchaseDate: purchaseDate ?? this.purchaseDate,
-      purchasePrice: purchasePrice ?? this.purchasePrice,
       ownerName: ownerName ?? this.ownerName,
       ownerPhone: ownerPhone ?? this.ownerPhone,
       ownerEmail: ownerEmail ?? this.ownerEmail,
+      partitions: partitions ?? this.partitions,
       isActive: isActive ?? this.isActive,
-      images: images ?? this.images,
-      additionalInfo: additionalInfo ?? this.additionalInfo,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      purchaseDate: purchaseDate ?? this.purchaseDate,
+      purchasePrice: purchasePrice ?? this.purchasePrice,
+    );
+  }
+
+  // Convert to JSON
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'address': address,
+      'ownerName': ownerName,
+      'ownerPhone': ownerPhone,
+      'ownerEmail': ownerEmail,
+      'partitions': partitions.map((p) => p.toJson()).toList(),
+      'isActive': isActive,
+      'createdAt': createdAt?.toIso8601String(),
+      'updatedAt': updatedAt?.toIso8601String(),
+      'purchaseDate': purchaseDate?.toIso8601String(),
+      'purchasePrice': purchasePrice,
+    };
+  }
+
+  // Create from JSON
+  factory Property.fromJson(Map<String, dynamic> json) {
+    return Property(
+      id: json['id'],
+      name: json['name'] ?? '',
+      address: json['address'],
+      ownerName: json['ownerName'] ?? '',
+      ownerPhone: json['ownerPhone'] ?? '',
+      ownerEmail: json['ownerEmail'],
+      partitions:
+          (json['partitions'] as List<dynamic>?)
+              ?.map((p) => Partition.fromJson(p))
+              .toList() ??
+          [],
+      isActive: json['isActive'] ?? true,
+      createdAt:
+          json['createdAt'] != null ? DateTime.parse(json['createdAt']) : null,
+      updatedAt:
+          json['updatedAt'] != null ? DateTime.parse(json['updatedAt']) : null,
+      purchaseDate:
+          json['purchaseDate'] != null
+              ? DateTime.parse(json['purchaseDate'])
+              : null,
+      purchasePrice: json['purchasePrice']?.toDouble(),
     );
   }
 }

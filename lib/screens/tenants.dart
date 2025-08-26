@@ -3,38 +3,10 @@ import 'package:flutter_gap/flutter_gap.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
-
-class Tenant {
-  final String id;
-  final String name;
-  final String phone;
-  final String email;
-  final String propertyName;
-  final String? propertyId;
-  final String? roomId;
-  final String? roomName;
-  final double rentAmount;
-  final DateTime moveInDate;
-  final DateTime? moveOutDate;
-  final bool isActive;
-  final List<String>? contractPages; // Multiple contract pages
-
-  Tenant({
-    required this.id,
-    required this.name,
-    required this.phone,
-    required this.email,
-    required this.propertyName,
-    this.propertyId,
-    this.roomId,
-    this.roomName,
-    required this.rentAmount,
-    required this.moveInDate,
-    this.moveOutDate,
-    this.isActive = true,
-    this.contractPages,
-  });
-}
+import '../models/tenant.dart';
+import '../models/property.dart';
+import '../services/tenant_service.dart';
+import '../services/property_service.dart';
 
 class TenantsScreen extends StatefulWidget {
   const TenantsScreen({super.key});
@@ -48,56 +20,40 @@ class _TenantsScreenState extends State<TenantsScreen> {
   final List<Tenant> _allTenants = [];
   List<Tenant> _filteredTenants = [];
   bool _isSearching = false;
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _loadSampleTenants();
-    _filteredTenants = _allTenants;
+    _loadTenantsFromFirebase();
   }
 
-  void _loadSampleTenants() {
-    _allTenants.addAll([
-      Tenant(
-        id: '1',
-        name: 'Reginald Raymond',
-        phone: '+255 123 456 789',
-        email: 'reginald@email.com',
-        propertyName: 'Sunset Apartments',
-        propertyId: '1',
-        roomId: '1',
-        roomName: 'Room 1A',
-        rentAmount: 150000,
-        moveInDate: DateTime(2024, 1, 15),
-        contractPages: null,
-      ),
-      Tenant(
-        id: '2',
-        name: 'Heyday Dismiss',
-        phone: '+255 987 654 321',
-        email: 'heyday@email.com',
-        propertyName: 'Sunset Apartments',
-        propertyId: '1',
-        roomId: '3',
-        roomName: 'Room 2A',
-        rentAmount: 120000,
-        moveInDate: DateTime(2024, 2, 1),
-        contractPages: null,
-      ),
-      Tenant(
-        id: '3',
-        name: 'Henna Sinbad',
-        phone: '+255 555 123 456',
-        email: 'henna@email.com',
-        propertyName: 'Green Valley House',
-        propertyId: '2',
-        roomId: '4',
-        roomName: 'Main Unit',
-        rentAmount: 80000,
-        moveInDate: DateTime(2024, 3, 10),
-        contractPages: null,
-      ),
-    ]);
+  Future<void> _loadTenantsFromFirebase() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final tenants = await TenantService.fetchTenants();
+      setState(() {
+        _allTenants.clear();
+        _allTenants.addAll(tenants);
+        _filteredTenants = _allTenants;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading tenants: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _filterTenants(String query) {
@@ -110,7 +66,8 @@ class _TenantsScreenState extends State<TenantsScreen> {
             _allTenants
                 .where(
                   (tenant) =>
-                      tenant.name.toLowerCase().contains(query.toLowerCase()),
+                      tenant.name.toLowerCase().contains(query.toLowerCase()) ||
+                      tenant.phone.toLowerCase().contains(query.toLowerCase()),
                 )
                 .toList();
         _isSearching = true;
@@ -124,15 +81,33 @@ class _TenantsScreenState extends State<TenantsScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => const AddTenantForm(),
-    ).then((newTenant) {
+    ).then((newTenant) async {
       if (newTenant != null) {
-        setState(() {
-          _allTenants.add(newTenant);
-          _filteredTenants = _allTenants;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${newTenant.name} added successfully!')),
-        );
+        // Save to Firebase
+        final success = await TenantService.saveTenant(newTenant);
+
+        if (success) {
+          // Reload tenants from Firebase
+          await _loadTenantsFromFirebase();
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('${newTenant.name} added successfully!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Failed to save tenant. Please try again.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
       }
     });
   }
@@ -150,21 +125,135 @@ class _TenantsScreenState extends State<TenantsScreen> {
                 child: const Text('Cancel'),
               ),
               TextButton(
-                onPressed: () {
-                  setState(() {
-                    _allTenants.remove(tenant);
-                    _filteredTenants = _allTenants;
-                  });
+                onPressed: () async {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('${tenant.name} deleted successfully!'),
-                    ),
-                  );
+
+                  // Delete from Firebase
+                  final success = await TenantService.deleteTenant(tenant.id!);
+
+                  if (success) {
+                    // Reload tenants from Firebase
+                    await _loadTenantsFromFirebase();
+
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('${tenant.name} deleted successfully!'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  } else {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Failed to delete tenant. Please try again.',
+                          ),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
                 },
                 child: const Text(
                   'Delete',
                   style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
+          ),
+    );
+  }
+
+  void _unassignTenant(Tenant tenant) {
+    if (tenant.propertyId == null || tenant.partitionId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tenant is not assigned to any partition.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Unassign Tenant'),
+            content: Text(
+              'Are you sure you want to unassign ${tenant.name} from ${tenant.partitionName}?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+
+                  // Unassign tenant from partition
+                  final success =
+                      await PropertyService.unassignTenantFromPartition(
+                        tenant.propertyId!,
+                        tenant.partitionId!,
+                      );
+
+                  if (success) {
+                    // Update tenant with move-out date
+                    final updatedTenant = tenant.copyWith(
+                      moveOutDate: DateTime.now(),
+                      isActive: false,
+                      updatedAt: DateTime.now(),
+                    );
+
+                    final tenantUpdateSuccess =
+                        await TenantService.updateTenant(updatedTenant);
+
+                    if (tenantUpdateSuccess) {
+                      // Reload tenants from Firebase
+                      await _loadTenantsFromFirebase();
+
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '${tenant.name} unassigned successfully!',
+                            ),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    } else {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Failed to update tenant. Please try again.',
+                            ),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                  } else {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Failed to unassign tenant. Please try again.',
+                          ),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                },
+                child: const Text(
+                  'Unassign',
+                  style: TextStyle(color: Colors.orange),
                 ),
               ),
             ],
@@ -225,7 +314,9 @@ class _TenantsScreenState extends State<TenantsScreen> {
                                     borderRadius: BorderRadius.circular(8),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.grey.withOpacity(0.3),
+                                        color: Colors.grey.withValues(
+                                          alpha: 0.3,
+                                        ),
                                         spreadRadius: 1,
                                         blurRadius: 3,
                                         offset: const Offset(0, 2),
@@ -291,14 +382,14 @@ class _TenantsScreenState extends State<TenantsScreen> {
                                   Icon(
                                     Icons.description_outlined,
                                     size: 64,
-                                    color: Colors.grey.withOpacity(0.5),
+                                    color: Colors.grey.withValues(alpha: 0.5),
                                   ),
                                   Gap(16),
                                   Text(
                                     'No contract pages available',
                                     style: TextStyle(
                                       fontSize: 16,
-                                      color: Colors.grey.withOpacity(0.7),
+                                      color: Colors.grey.withValues(alpha: 0.7),
                                     ),
                                   ),
                                 ],
@@ -324,7 +415,7 @@ class _TenantsScreenState extends State<TenantsScreen> {
                               color:
                                   index == 0
                                       ? Color(0xFF3F51B5)
-                                      : Colors.grey.withOpacity(0.3),
+                                      : Colors.grey.withValues(alpha: 0.3),
                             ),
                           ),
                         ),
@@ -345,6 +436,13 @@ class _TenantsScreenState extends State<TenantsScreen> {
         backgroundColor: Color(0xFF3F51B5), // Primary: Indigo Blue
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadTenantsFromFirebase,
+            tooltip: 'Refresh Tenants',
+          ),
+        ],
       ),
       body: Container(
         decoration: BoxDecoration(
@@ -359,7 +457,7 @@ class _TenantsScreenState extends State<TenantsScreen> {
                 controller: _searchController,
                 onChanged: _filterTenants,
                 decoration: InputDecoration(
-                  hintText: 'Search tenants by name...',
+                  hintText: 'Search tenants by name or phone...',
                   prefixIcon: const Icon(Icons.search),
                   suffixIcon:
                       _isSearching
@@ -387,7 +485,9 @@ class _TenantsScreenState extends State<TenantsScreen> {
             // Tenants List
             Expanded(
               child:
-                  _filteredTenants.isEmpty
+                  _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _filteredTenants.isEmpty
                       ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -445,7 +545,7 @@ class _TenantsScreenState extends State<TenantsScreen> {
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.grey.withOpacity(0.3),
+                                  color: Colors.grey.withValues(alpha: 0.3),
                                   spreadRadius: 1,
                                   blurRadius: 3,
                                   offset: const Offset(0, 2),
@@ -460,7 +560,7 @@ class _TenantsScreenState extends State<TenantsScreen> {
                                   0xFF3F51B5,
                                 ), // Primary: Indigo Blue
                                 child: Icon(
-                                  Icons.description,
+                                  Icons.person,
                                   color: Colors.white,
                                   size: 20,
                                 ),
@@ -487,11 +587,14 @@ class _TenantsScreenState extends State<TenantsScreen> {
                                         ), // Text: Secondary
                                       ),
                                       Gap(4),
-                                      Text(
-                                        tenant.phone,
-                                        style: TextStyle(
-                                          color: Color(0xFF7F8C8D),
-                                        ), // Text: Secondary
+                                      Expanded(
+                                        child: Text(
+                                          tenant.phone,
+                                          style: TextStyle(
+                                            color: Color(0xFF7F8C8D),
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -506,11 +609,14 @@ class _TenantsScreenState extends State<TenantsScreen> {
                                         ), // Text: Secondary
                                       ),
                                       Gap(4),
-                                      Text(
-                                        '${tenant.propertyName} - ${tenant.roomName ?? "No Room"}',
-                                        style: TextStyle(
-                                          color: Color(0xFF7F8C8D),
-                                        ), // Text: Secondary
+                                      Expanded(
+                                        child: Text(
+                                          '${tenant.propertyName} - ${tenant.partitionName ?? "No Partition"}',
+                                          style: TextStyle(
+                                            color: Color(0xFF7F8C8D),
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -525,11 +631,45 @@ class _TenantsScreenState extends State<TenantsScreen> {
                                         ), // Text: Secondary
                                       ),
                                       Gap(4),
-                                      Text(
-                                        'TZS ${tenant.rentAmount.toStringAsFixed(0)}',
-                                        style: TextStyle(
-                                          color: Color(0xFF7F8C8D),
-                                        ), // Text: Secondary
+                                      Expanded(
+                                        child: Text(
+                                          'TZS ${tenant.rentAmount.toStringAsFixed(0)}',
+                                          style: TextStyle(
+                                            color: Color(0xFF7F8C8D),
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Gap(2),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        tenant.isActive
+                                            ? Icons.check_circle
+                                            : Icons.cancel,
+                                        size: 16,
+                                        color:
+                                            tenant.isActive
+                                                ? Color(0xFF2ECC71)
+                                                : Color(0xFFE74C3C),
+                                      ),
+                                      Gap(4),
+                                      Expanded(
+                                        child: Text(
+                                          tenant.isActive
+                                              ? 'Active'
+                                              : 'Inactive',
+                                          style: TextStyle(
+                                            color:
+                                                tenant.isActive
+                                                    ? Color(0xFF2ECC71)
+                                                    : Color(0xFFE74C3C),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -552,19 +692,22 @@ class _TenantsScreenState extends State<TenantsScreen> {
                                     icon: const Icon(Icons.more_vert),
                                     itemBuilder:
                                         (context) => [
-                                          PopupMenuItem(
-                                            value: 'edit',
-                                            child: Row(
-                                              children: [
-                                                Icon(
-                                                  Icons.edit,
-                                                  color: Colors.blue,
-                                                ),
-                                                Gap(8),
-                                                Text('Edit'),
-                                              ],
+                                          if (tenant.isActive &&
+                                              tenant.propertyId != null &&
+                                              tenant.partitionId != null)
+                                            PopupMenuItem(
+                                              value: 'unassign',
+                                              child: Row(
+                                                children: [
+                                                  Icon(
+                                                    Icons.logout,
+                                                    color: Colors.orange,
+                                                  ),
+                                                  Gap(8),
+                                                  Text('Unassign'),
+                                                ],
+                                              ),
                                             ),
-                                          ),
                                           PopupMenuItem(
                                             value: 'delete',
                                             child: Row(
@@ -580,17 +723,8 @@ class _TenantsScreenState extends State<TenantsScreen> {
                                           ),
                                         ],
                                     onSelected: (value) {
-                                      if (value == 'edit') {
-                                        // TODO: Implement edit functionality
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'Edit functionality coming soon!',
-                                            ),
-                                          ),
-                                        );
+                                      if (value == 'unassign') {
+                                        _unassignTenant(tenant);
                                       } else if (value == 'delete') {
                                         _deleteTenant(tenant);
                                       }
@@ -629,11 +763,64 @@ class _AddTenantFormState extends State<AddTenantForm> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
-  final _propertyController = TextEditingController();
   final _rentController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
   final List<String> _contractPages = []; // Multiple contract pages
   final ImagePicker _picker = ImagePicker();
+
+  // Property and partition selection
+  List<Property> _properties = [];
+  Property? _selectedProperty;
+  Partition? _selectedPartition;
+  bool _isLoadingProperties = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProperties();
+  }
+
+  Future<void> _loadProperties() async {
+    setState(() {
+      _isLoadingProperties = true;
+    });
+
+    try {
+      final properties = await PropertyService.fetchProperties();
+      setState(() {
+        _properties = properties;
+        _isLoadingProperties = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingProperties = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading properties: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _onPropertyChanged(Property? property) {
+    setState(() {
+      _selectedProperty = property;
+      _selectedPartition = null; // Reset partition selection
+    });
+  }
+
+  void _onPartitionChanged(Partition? partition) {
+    setState(() {
+      _selectedPartition = partition;
+      if (partition != null) {
+        _rentController.text = partition.monthlyRent.toString();
+      }
+    });
+  }
 
   Future<void> _takeContractPage() async {
     // Request camera permission
@@ -752,6 +939,188 @@ class _AddTenantFormState extends State<AddTenantForm> {
                     ),
                     Gap(16),
 
+                    TextFormField(
+                      controller: _phoneController,
+                      decoration: const InputDecoration(
+                        labelText: 'Phone Number *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.phone),
+                      ),
+                      keyboardType: TextInputType.phone,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter phone number';
+                        }
+                        return null;
+                      },
+                    ),
+                    Gap(16),
+
+                    TextFormField(
+                      controller: _emailController,
+                      decoration: const InputDecoration(
+                        labelText: 'Email',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.email),
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    Gap(16),
+
+                    // Property Selection
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Color(0xFFF5F6FA),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Color(0xFF3F51B5).withValues(alpha: 0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Property & Partition Selection',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF2C3E50),
+                            ),
+                          ),
+                          Gap(12),
+
+                          // Property Dropdown
+                          DropdownButtonFormField<Property>(
+                            value: _selectedProperty,
+                            decoration: const InputDecoration(
+                              labelText: 'Select Property *',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.home),
+                            ),
+                            items:
+                                _properties.map((property) {
+                                  return DropdownMenuItem(
+                                    value: property,
+                                    child: Text(property.name),
+                                  );
+                                }).toList(),
+                            onChanged: _onPropertyChanged,
+                            validator: (value) {
+                              if (value == null) {
+                                return 'Please select a property';
+                              }
+                              return null;
+                            },
+                          ),
+                          Gap(12),
+
+                          // Partition Dropdown
+                          if (_selectedProperty != null) ...[
+                            DropdownButtonFormField<Partition>(
+                              value: _selectedPartition,
+                              decoration: const InputDecoration(
+                                labelText: 'Select Available Partition *',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.room),
+                              ),
+                              items:
+                                  _selectedProperty!.availablePartitionsList.map((
+                                    partition,
+                                  ) {
+                                    return DropdownMenuItem(
+                                      value: partition,
+                                      child: Text(
+                                        '${partition.name} - TZS ${partition.monthlyRent.toStringAsFixed(0)}',
+                                      ),
+                                    );
+                                  }).toList(),
+                              onChanged: _onPartitionChanged,
+                              validator: (value) {
+                                if (value == null) {
+                                  return 'Please select a partition';
+                                }
+                                return null;
+                              },
+                            ),
+                            Gap(8),
+                            if (_selectedProperty!
+                                .availablePartitionsList
+                                .isEmpty)
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.orange),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.warning, color: Colors.orange),
+                                    Gap(8),
+                                    Expanded(
+                                      child: Text(
+                                        'No available partitions in this property',
+                                        style: TextStyle(color: Colors.orange),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    Gap(16),
+
+                    TextFormField(
+                      controller: _rentController,
+                      decoration: const InputDecoration(
+                        labelText: 'Monthly Rent (TZS) *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.attach_money),
+                      ),
+                      keyboardType: TextInputType.number,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter rent amount';
+                        }
+                        if (double.tryParse(value) == null) {
+                          return 'Please enter a valid number';
+                        }
+                        return null;
+                      },
+                    ),
+                    Gap(16),
+
+                    InkWell(
+                      onTap: () async {
+                        final date = await showDatePicker(
+                          context: context,
+                          initialDate: _selectedDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime.now(),
+                        );
+                        if (date != null) {
+                          setState(() {
+                            _selectedDate = date;
+                          });
+                        }
+                      },
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: 'Move-in Date *',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.calendar_today),
+                        ),
+                        child: Text(
+                          '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
+                        ),
+                      ),
+                    ),
+                    Gap(16),
+
                     // Contract Document Capture Section
                     Container(
                       padding: const EdgeInsets.all(16),
@@ -759,7 +1128,7 @@ class _AddTenantFormState extends State<AddTenantForm> {
                         color: Color(0xFFF5F6FA),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: Color(0xFF3F51B5).withOpacity(0.3),
+                          color: Color(0xFF3F51B5).withValues(alpha: 0.3),
                           width: 1,
                         ),
                       ),
@@ -770,7 +1139,7 @@ class _AddTenantFormState extends State<AddTenantForm> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                'Contract Document',
+                                'Contract Document (Optional)',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
@@ -810,7 +1179,9 @@ class _AddTenantFormState extends State<AddTenantForm> {
                                       ),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.grey.withOpacity(0.3),
+                                          color: Colors.grey.withValues(
+                                            alpha: 0.3,
+                                          ),
                                           spreadRadius: 1,
                                           blurRadius: 3,
                                           offset: const Offset(0, 2),
@@ -865,8 +1236,8 @@ class _AddTenantFormState extends State<AddTenantForm> {
                                               vertical: 2,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: Colors.black.withOpacity(
-                                                0.7,
+                                              color: Colors.black.withValues(
+                                                alpha: 0.7,
                                               ),
                                               borderRadius:
                                                   BorderRadius.circular(4),
@@ -927,7 +1298,9 @@ class _AddTenantFormState extends State<AddTenantForm> {
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                  color: Color(0xFF3F51B5).withOpacity(0.2),
+                                  color: Color(
+                                    0xFF3F51B5,
+                                  ).withValues(alpha: 0.2),
                                   width: 1,
                                   style: BorderStyle.solid,
                                 ),
@@ -956,93 +1329,8 @@ class _AddTenantFormState extends State<AddTenantForm> {
                         ],
                       ),
                     ),
-                    Gap(16),
-                    TextFormField(
-                      controller: _phoneController,
-                      decoration: const InputDecoration(
-                        labelText: 'Phone Number *',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.phone),
-                      ),
-                      keyboardType: TextInputType.phone,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter phone number';
-                        }
-                        return null;
-                      },
-                    ),
-                    Gap(16),
-                    TextFormField(
-                      controller: _emailController,
-                      decoration: const InputDecoration(
-                        labelText: 'Email',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.email),
-                      ),
-                      keyboardType: TextInputType.emailAddress,
-                    ),
-                    Gap(16),
-                    TextFormField(
-                      controller: _propertyController,
-                      decoration: const InputDecoration(
-                        labelText: 'Property Name *',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.home),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter property name';
-                        }
-                        return null;
-                      },
-                    ),
-                    Gap(16),
-                    TextFormField(
-                      controller: _rentController,
-                      decoration: const InputDecoration(
-                        labelText: 'Monthly Rent (TZS) *',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.attach_money),
-                      ),
-                      keyboardType: TextInputType.number,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter rent amount';
-                        }
-                        if (double.tryParse(value) == null) {
-                          return 'Please enter a valid number';
-                        }
-                        return null;
-                      },
-                    ),
-                    Gap(16),
-                    InkWell(
-                      onTap: () async {
-                        final date = await showDatePicker(
-                          context: context,
-                          initialDate: _selectedDate,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime.now(),
-                        );
-                        if (date != null) {
-                          setState(() {
-                            _selectedDate = date;
-                          });
-                        }
-                      },
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Move-in Date *',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.calendar_today),
-                        ),
-                        child: Text(
-                          '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
-                        ),
-                      ),
-                    ),
                     Gap(32),
+
                     SizedBox(
                       width: double.infinity,
                       height: 50,
@@ -1073,20 +1361,70 @@ class _AddTenantFormState extends State<AddTenantForm> {
     );
   }
 
-  void _submitForm() {
+  void _submitForm() async {
     if (_formKey.currentState!.validate()) {
+      if (_selectedProperty == null || _selectedPartition == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please select a property and partition'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
       final newTenant = Tenant(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         name: _nameController.text.trim(),
         phone: _phoneController.text.trim(),
         email: _emailController.text.trim(),
-        propertyName: _propertyController.text.trim(),
+        propertyName: _selectedProperty!.name,
+        propertyId: _selectedProperty!.id,
+        partitionId: _selectedPartition!.id,
+        partitionName: _selectedPartition!.name,
         rentAmount: double.parse(_rentController.text),
         moveInDate: _selectedDate,
         contractPages: _contractPages.isEmpty ? null : _contractPages,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
       );
 
-      Navigator.pop(context, newTenant);
+      // Save tenant to Firebase
+      final tenantSuccess = await TenantService.saveTenant(newTenant);
+
+      if (tenantSuccess) {
+        // Assign tenant to partition
+        final partitionSuccess = await PropertyService.assignTenantToPartition(
+          _selectedProperty!.id!,
+          _selectedPartition!.id,
+          newTenant.id!,
+          newTenant.name,
+        );
+
+        if (partitionSuccess) {
+          Navigator.pop(context, newTenant);
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Tenant saved but failed to assign to partition. Please try again.',
+                ),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to save tenant. Please try again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -1095,7 +1433,6 @@ class _AddTenantFormState extends State<AddTenantForm> {
     _nameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
-    _propertyController.dispose();
     _rentController.dispose();
     super.dispose();
   }
