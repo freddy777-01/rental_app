@@ -24,8 +24,8 @@ class CloudinaryUploadResult {
 
 class CloudinaryService {
   // Your Cloudinary credentials
-  static const String _cloudName = 'dujga4sq6';
-  static const String _uploadPreset = 'ml_default'; // Use your upload preset
+  // static const String _cloudName = 'dujga4sq6';
+  // static const String _uploadPreset = 'ml_default'; // Use your upload preset
   static const String _API_KEY = "816173986778337";
   static const String _API_SECRET = "FCbIk5L1oy_tGMfrfvRpo-ijuDs";
   static const String _CLOUD_NAME = "dujga4sq6";

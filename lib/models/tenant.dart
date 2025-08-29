@@ -8,8 +8,11 @@ class Tenant {
   final String? partitionId;
   final String? partitionName;
   final double rentAmount;
+  final int paymentFrequencyMonths; // How many months between payments
   final DateTime moveInDate;
   final DateTime? moveOutDate;
+  final DateTime? contractStartDate;
+  final DateTime? contractEndDate;
   final bool isActive;
   final List<String>? contractPages; // Multiple contract pages
   final DateTime? createdAt;
@@ -25,8 +28,11 @@ class Tenant {
     this.partitionId,
     this.partitionName,
     required this.rentAmount,
+    this.paymentFrequencyMonths = 1, // Default to monthly payments
     required this.moveInDate,
     this.moveOutDate,
+    this.contractStartDate,
+    this.contractEndDate,
     this.isActive = true,
     this.contractPages,
     this.createdAt,
@@ -45,8 +51,11 @@ class Tenant {
       'partitionId': partitionId,
       'partitionName': partitionName,
       'rentAmount': rentAmount,
+      'paymentFrequencyMonths': paymentFrequencyMonths,
       'moveInDate': moveInDate.toIso8601String(),
       'moveOutDate': moveOutDate?.toIso8601String(),
+      'contractStartDate': contractStartDate?.toIso8601String(),
+      'contractEndDate': contractEndDate?.toIso8601String(),
       'isActive': isActive,
       'contractPages': contractPages,
       'createdAt': createdAt?.toIso8601String(),
@@ -66,6 +75,7 @@ class Tenant {
       partitionId: json['partitionId'],
       partitionName: json['partitionName'],
       rentAmount: (json['rentAmount'] ?? 0).toDouble(),
+      paymentFrequencyMonths: json['paymentFrequencyMonths'] ?? 1,
       moveInDate:
           json['moveInDate'] != null
               ? DateTime.parse(json['moveInDate'])
@@ -73,6 +83,14 @@ class Tenant {
       moveOutDate:
           json['moveOutDate'] != null
               ? DateTime.parse(json['moveOutDate'])
+              : null,
+      contractStartDate:
+          json['contractStartDate'] != null
+              ? DateTime.parse(json['contractStartDate'])
+              : null,
+      contractEndDate:
+          json['contractEndDate'] != null
+              ? DateTime.parse(json['contractEndDate'])
               : null,
       isActive: json['isActive'] ?? true,
       contractPages:
@@ -97,8 +115,11 @@ class Tenant {
     String? partitionId,
     String? partitionName,
     double? rentAmount,
+    int? paymentFrequencyMonths,
     DateTime? moveInDate,
     DateTime? moveOutDate,
+    DateTime? contractStartDate,
+    DateTime? contractEndDate,
     bool? isActive,
     List<String>? contractPages,
     DateTime? createdAt,
@@ -114,8 +135,12 @@ class Tenant {
       partitionId: partitionId ?? this.partitionId,
       partitionName: partitionName ?? this.partitionName,
       rentAmount: rentAmount ?? this.rentAmount,
+      paymentFrequencyMonths:
+          paymentFrequencyMonths ?? this.paymentFrequencyMonths,
       moveInDate: moveInDate ?? this.moveInDate,
       moveOutDate: moveOutDate ?? this.moveOutDate,
+      contractStartDate: contractStartDate ?? this.contractStartDate,
+      contractEndDate: contractEndDate ?? this.contractEndDate,
       isActive: isActive ?? this.isActive,
       contractPages: contractPages ?? this.contractPages,
       createdAt: createdAt ?? this.createdAt,
@@ -126,7 +151,7 @@ class Tenant {
   // To string method
   @override
   String toString() {
-    return 'Tenant(id: $id, name: $name, phone: $phone, email: $email, propertyName: $propertyName, propertyId: $propertyId, partitionId: $partitionId, partitionName: $partitionName, rentAmount: $rentAmount, moveInDate: $moveInDate, moveOutDate: $moveOutDate, isActive: $isActive, contractPages: $contractPages, createdAt: $createdAt, updatedAt: $updatedAt)';
+    return 'Tenant(id: $id, name: $name, phone: $phone, email: $email, propertyName: $propertyName, propertyId: $propertyId, partitionId: $partitionId, partitionName: $partitionName, rentAmount: $rentAmount, paymentFrequencyMonths: $paymentFrequencyMonths, moveInDate: $moveInDate, moveOutDate: $moveOutDate, contractStartDate: $contractStartDate, contractEndDate: $contractEndDate, isActive: $isActive, contractPages: $contractPages, createdAt: $createdAt, updatedAt: $updatedAt)';
   }
 
   // Equality operator
@@ -143,8 +168,11 @@ class Tenant {
         other.partitionId == partitionId &&
         other.partitionName == partitionName &&
         other.rentAmount == rentAmount &&
+        other.paymentFrequencyMonths == paymentFrequencyMonths &&
         other.moveInDate == moveInDate &&
         other.moveOutDate == moveOutDate &&
+        other.contractStartDate == contractStartDate &&
+        other.contractEndDate == contractEndDate &&
         other.isActive == isActive &&
         other.contractPages == contractPages &&
         other.createdAt == createdAt &&
@@ -163,12 +191,14 @@ class Tenant {
         partitionId.hashCode ^
         partitionName.hashCode ^
         rentAmount.hashCode ^
+        paymentFrequencyMonths.hashCode ^
         moveInDate.hashCode ^
         moveOutDate.hashCode ^
+        contractStartDate.hashCode ^
+        contractEndDate.hashCode ^
         isActive.hashCode ^
         contractPages.hashCode ^
         createdAt.hashCode ^
         updatedAt.hashCode;
   }
 }
-

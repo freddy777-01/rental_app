@@ -15,6 +15,9 @@ class TenantsScreen extends StatefulWidget {
   State<TenantsScreen> createState() => _TenantsScreenState();
 }
 
+/// TODO :: When recording  payment then the app should calculate the next payment will be but user has an option to change the date.
+///TODO => create a mechanisim first to save contract images.
+
 class _TenantsScreenState extends State<TenantsScreen> {
   final TextEditingController _searchController = TextEditingController();
   final List<Tenant> _allTenants = [];
@@ -261,6 +264,27 @@ class _TenantsScreenState extends State<TenantsScreen> {
     );
   }
 
+  String _calculateContractDurationForTenant(Tenant tenant) {
+    if (tenant.contractStartDate == null || tenant.contractEndDate == null) {
+      return 'N/A';
+    }
+
+    final difference = tenant.contractEndDate!.difference(
+      tenant.contractStartDate!,
+    );
+    final years = difference.inDays ~/ 365;
+    final months = (difference.inDays % 365) ~/ 30;
+    final days = difference.inDays % 30;
+
+    if (years > 0) {
+      return '$years year${years > 1 ? 's' : ''} ${months > 0 ? '$months month${months > 1 ? 's' : ''}' : ''}';
+    } else if (months > 0) {
+      return '$months month${months > 1 ? 's' : ''} ${days > 0 ? '$days day${days > 1 ? 's' : ''}' : ''}';
+    } else {
+      return '$days day${days > 1 ? 's' : ''}';
+    }
+  }
+
   void _viewContract(Tenant tenant) {
     showDialog(
       context: context,
@@ -294,6 +318,164 @@ class _TenantsScreenState extends State<TenantsScreen> {
                         IconButton(
                           onPressed: () => Navigator.pop(context),
                           icon: const Icon(Icons.close, color: Colors.white),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Contract Information
+                  if (tenant.contractStartDate != null ||
+                      tenant.contractEndDate != null)
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      margin: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Color(0xFFF5F6FA),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Color(0xFF3F51B5).withValues(alpha: 0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Contract Period',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF2C3E50),
+                            ),
+                          ),
+                          Gap(8),
+                          if (tenant.contractStartDate != null)
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.calendar_today,
+                                  size: 16,
+                                  color: Color(0xFF7F8C8D),
+                                ),
+                                Gap(8),
+                                Text(
+                                  'Start: ${tenant.contractStartDate!.day}/${tenant.contractStartDate!.month}/${tenant.contractStartDate!.year}',
+                                  style: TextStyle(color: Color(0xFF7F8C8D)),
+                                ),
+                              ],
+                            ),
+                          if (tenant.contractEndDate != null) ...[
+                            Gap(4),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.calendar_today,
+                                  size: 16,
+                                  color: Color(0xFF7F8C8D),
+                                ),
+                                Gap(8),
+                                Text(
+                                  'End: ${tenant.contractEndDate!.day}/${tenant.contractEndDate!.month}/${tenant.contractEndDate!.year}',
+                                  style: TextStyle(color: Color(0xFF7F8C8D)),
+                                ),
+                              ],
+                            ),
+                          ],
+                          if (tenant.contractStartDate != null &&
+                              tenant.contractEndDate != null) ...[
+                            Gap(4),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.access_time,
+                                  size: 16,
+                                  color: Color(0xFF7F8C8D),
+                                ),
+                                Gap(8),
+                                Text(
+                                  'Duration: ${_calculateContractDurationForTenant(tenant)}',
+                                  style: TextStyle(
+                                    color: Color(0xFF3F51B5),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+
+                  // Payment Information
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    margin: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Color(0xFFF5F6FA),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Color(0xFF3F51B5).withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Payment Details',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF2C3E50),
+                          ),
+                        ),
+                        Gap(8),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.attach_money,
+                              size: 16,
+                              color: Color(0xFF7F8C8D),
+                            ),
+                            Gap(8),
+                            Text(
+                              'Monthly Rent: TZS ${tenant.rentAmount.toStringAsFixed(0)}',
+                              style: TextStyle(color: Color(0xFF7F8C8D)),
+                            ),
+                          ],
+                        ),
+                        Gap(4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.schedule,
+                              size: 16,
+                              color: Color(0xFF7F8C8D),
+                            ),
+                            Gap(8),
+                            Text(
+                              'Payment Frequency: Every ${tenant.paymentFrequencyMonths} month${tenant.paymentFrequencyMonths > 1 ? 's' : ''}',
+                              style: TextStyle(color: Color(0xFF7F8C8D)),
+                            ),
+                          ],
+                        ),
+                        Gap(4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.payment,
+                              size: 16,
+                              color: Color(0xFF2ECC71),
+                            ),
+                            Gap(8),
+                            Text(
+                              'Payment Amount: TZS ${(tenant.rentAmount * tenant.paymentFrequencyMonths).toStringAsFixed(0)}',
+                              style: TextStyle(
+                                color: Color(0xFF2ECC71),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -633,9 +815,32 @@ class _TenantsScreenState extends State<TenantsScreen> {
                                       Gap(4),
                                       Expanded(
                                         child: Text(
-                                          'TZS ${tenant.rentAmount.toStringAsFixed(0)}',
+                                          'TZS ${tenant.rentAmount.toStringAsFixed(0)}/month',
                                           style: TextStyle(
                                             color: Color(0xFF7F8C8D),
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Gap(2),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.schedule,
+                                        size: 16,
+                                        color: Color(
+                                          0xFF7F8C8D,
+                                        ), // Text: Secondary
+                                      ),
+                                      Gap(4),
+                                      Expanded(
+                                        child: Text(
+                                          'Pay every ${tenant.paymentFrequencyMonths} month${tenant.paymentFrequencyMonths > 1 ? 's' : ''} (TZS ${(tenant.rentAmount * tenant.paymentFrequencyMonths).toStringAsFixed(0)})',
+                                          style: TextStyle(
+                                            color: Color(0xFF7F8C8D),
+                                            fontSize: 12,
                                           ),
                                           overflow: TextOverflow.ellipsis,
                                         ),
@@ -673,6 +878,37 @@ class _TenantsScreenState extends State<TenantsScreen> {
                                       ),
                                     ],
                                   ),
+                                  if (tenant.contractStartDate != null ||
+                                      tenant.contractEndDate != null) ...[
+                                    Gap(2),
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.description,
+                                          size: 16,
+                                          color: Color(0xFF7F8C8D),
+                                        ),
+                                        Gap(4),
+                                        Expanded(
+                                          child: Text(
+                                            tenant.contractStartDate != null &&
+                                                    tenant.contractEndDate !=
+                                                        null
+                                                ? '${tenant.contractStartDate!.day}/${tenant.contractStartDate!.month}/${tenant.contractStartDate!.year} - ${tenant.contractEndDate!.day}/${tenant.contractEndDate!.month}/${tenant.contractEndDate!.year}'
+                                                : tenant.contractStartDate !=
+                                                    null
+                                                ? 'From ${tenant.contractStartDate!.day}/${tenant.contractStartDate!.month}/${tenant.contractStartDate!.year}'
+                                                : 'Until ${tenant.contractEndDate!.day}/${tenant.contractEndDate!.month}/${tenant.contractEndDate!.year}',
+                                            style: TextStyle(
+                                              color: Color(0xFF7F8C8D),
+                                              fontSize: 12,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ],
                               ),
                               trailing: Row(
@@ -764,7 +1000,10 @@ class _AddTenantFormState extends State<AddTenantForm> {
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _rentController = TextEditingController();
+  int _paymentFrequencyMonths = 1; // Default to monthly payments
   DateTime _selectedDate = DateTime.now();
+  DateTime? _contractStartDate;
+  DateTime? _contractEndDate;
   final List<String> _contractPages = []; // Multiple contract pages
   final ImagePicker _picker = ImagePicker();
 
@@ -875,6 +1114,25 @@ class _AddTenantFormState extends State<AddTenantForm> {
     setState(() {
       _contractPages.removeAt(index);
     });
+  }
+
+  String _calculateContractDuration() {
+    if (_contractStartDate == null || _contractEndDate == null) {
+      return 'N/A';
+    }
+
+    final difference = _contractEndDate!.difference(_contractStartDate!);
+    final years = difference.inDays ~/ 365;
+    final months = (difference.inDays % 365) ~/ 30;
+    final days = difference.inDays % 30;
+
+    if (years > 0) {
+      return '$years year${years > 1 ? 's' : ''} ${months > 0 ? '$months month${months > 1 ? 's' : ''}' : ''}';
+    } else if (months > 0) {
+      return '$months month${months > 1 ? 's' : ''} ${days > 0 ? '$days day${days > 1 ? 's' : ''}' : ''}';
+    } else {
+      return '$days day${days > 1 ? 's' : ''}';
+    }
   }
 
   @override
@@ -1094,6 +1352,136 @@ class _AddTenantFormState extends State<AddTenantForm> {
                     ),
                     Gap(16),
 
+                    // Payment Frequency Section
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Color(0xFFF5F6FA),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Color(0xFF3F51B5).withValues(alpha: 0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Payment Schedule',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF2C3E50),
+                            ),
+                          ),
+                          Gap(12),
+
+                          // Payment Frequency Dropdown
+                          DropdownButtonFormField<int>(
+                            value: _paymentFrequencyMonths,
+                            decoration: const InputDecoration(
+                              labelText: 'Payment Frequency *',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.schedule),
+                            ),
+                            items: [
+                              DropdownMenuItem(
+                                value: 1,
+                                child: Text('Monthly (1 month)'),
+                              ),
+                              DropdownMenuItem(
+                                value: 2,
+                                child: Text('Every 2 months'),
+                              ),
+                              DropdownMenuItem(
+                                value: 3,
+                                child: Text('Every 3 months (Quarterly)'),
+                              ),
+                              DropdownMenuItem(
+                                value: 6,
+                                child: Text('Every 6 months (Semi-annually)'),
+                              ),
+                              DropdownMenuItem(
+                                value: 12,
+                                child: Text('Every 12 months (Annually)'),
+                              ),
+                            ],
+                            onChanged: (value) {
+                              setState(() {
+                                _paymentFrequencyMonths = value!;
+                              });
+                            },
+                          ),
+
+                          Gap(12),
+
+                          // Payment Summary
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: Color(0xFF3F51B5).withValues(alpha: 0.2),
+                                width: 1,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.info_outline,
+                                      color: Color(0xFF3F51B5),
+                                      size: 20,
+                                    ),
+                                    Gap(8),
+                                    Text(
+                                      'Payment Summary',
+                                      style: TextStyle(
+                                        color: Color(0xFF2C3E50),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Gap(8),
+                                Text(
+                                  'Monthly Rent: TZS ${_rentController.text.isEmpty ? '0' : _rentController.text}',
+                                  style: TextStyle(
+                                    color: Color(0xFF7F8C8D),
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                Text(
+                                  'Payment Frequency: Every $_paymentFrequencyMonths month${_paymentFrequencyMonths > 1 ? 's' : ''}',
+                                  style: TextStyle(
+                                    color: Color(0xFF7F8C8D),
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                if (_rentController.text.isNotEmpty &&
+                                    double.tryParse(_rentController.text) !=
+                                        null) ...[
+                                  Gap(4),
+                                  Text(
+                                    'Payment Amount: TZS ${(double.parse(_rentController.text) * _paymentFrequencyMonths).toStringAsFixed(0)}',
+                                    style: TextStyle(
+                                      color: Color(0xFF2ECC71),
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Gap(16),
+
                     InkWell(
                       onTap: () async {
                         final date = await showDatePicker(
@@ -1117,6 +1505,136 @@ class _AddTenantFormState extends State<AddTenantForm> {
                         child: Text(
                           '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
                         ),
+                      ),
+                    ),
+                    Gap(16),
+
+                    // Contract Dates Section
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Color(0xFFF5F6FA),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Color(0xFF3F51B5).withValues(alpha: 0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Contract Period (Optional)',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF2C3E50),
+                            ),
+                          ),
+                          Gap(12),
+
+                          // Contract Start Date
+                          InkWell(
+                            onTap: () async {
+                              final date = await showDatePicker(
+                                context: context,
+                                initialDate:
+                                    _contractStartDate ?? DateTime.now(),
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime(2030),
+                              );
+                              if (date != null) {
+                                setState(() {
+                                  _contractStartDate = date;
+                                });
+                              }
+                            },
+                            child: InputDecorator(
+                              decoration: const InputDecoration(
+                                labelText: 'Contract Start Date',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.calendar_today),
+                              ),
+                              child: Text(
+                                _contractStartDate != null
+                                    ? '${_contractStartDate!.day}/${_contractStartDate!.month}/${_contractStartDate!.year}'
+                                    : 'Select start date',
+                                style: TextStyle(
+                                  color:
+                                      _contractStartDate != null
+                                          ? Color(0xFF2C3E50)
+                                          : Color(0xFF7F8C8D),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Gap(12),
+
+                          // Contract End Date
+                          InkWell(
+                            onTap: () async {
+                              final date = await showDatePicker(
+                                context: context,
+                                initialDate:
+                                    _contractEndDate ??
+                                    (_contractStartDate ?? DateTime.now()),
+                                firstDate: _contractStartDate ?? DateTime(2020),
+                                lastDate: DateTime(2030),
+                              );
+                              if (date != null) {
+                                setState(() {
+                                  _contractEndDate = date;
+                                });
+                              }
+                            },
+                            child: InputDecorator(
+                              decoration: const InputDecoration(
+                                labelText: 'Contract End Date',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.calendar_today),
+                              ),
+                              child: Text(
+                                _contractEndDate != null
+                                    ? '${_contractEndDate!.day}/${_contractEndDate!.month}/${_contractEndDate!.year}'
+                                    : 'Select end date',
+                                style: TextStyle(
+                                  color:
+                                      _contractEndDate != null
+                                          ? Color(0xFF2C3E50)
+                                          : Color(0xFF7F8C8D),
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          if (_contractStartDate != null &&
+                              _contractEndDate != null) ...[
+                            Gap(8),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.blue),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.info, color: Colors.blue),
+                                  Gap(8),
+                                  Expanded(
+                                    child: Text(
+                                      'Contract Duration: ${_calculateContractDuration()}',
+                                      style: TextStyle(
+                                        color: Colors.blue,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                     Gap(16),
@@ -1383,7 +1901,10 @@ class _AddTenantFormState extends State<AddTenantForm> {
         partitionId: _selectedPartition!.id,
         partitionName: _selectedPartition!.name,
         rentAmount: double.parse(_rentController.text),
+        paymentFrequencyMonths: _paymentFrequencyMonths,
         moveInDate: _selectedDate,
+        contractStartDate: _contractStartDate,
+        contractEndDate: _contractEndDate,
         contractPages: _contractPages.isEmpty ? null : _contractPages,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
